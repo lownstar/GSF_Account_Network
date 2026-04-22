@@ -2,6 +2,8 @@
 // Import the GSF multi-source identity network from CSV seed data.
 // Reads dw_account.csv, positions_topaz.csv, positions_emerald.csv from
 // the sibling GSF_Semantic_Pipeline repo.
+// Creates one combined graph (all 100 accounts) and one individual graph
+// per account. Both are idempotent — re-running skips existing graphs.
 // Usage: node scripts/importGSF.js
 
 const fs = require('fs');
@@ -10,7 +12,7 @@ const db = require('../server/db');
 
 const SEED_DIR = path.resolve(__dirname, '../../GSF_Semantic_Pipeline/data/seed_v2');
 const GRAPH_TYPE_NAME = 'GSF Multi-Source Identity';
-const GRAPH_NAME = 'GSF Identity Network — 100 Accounts';
+const COMBINED_GRAPH_NAME = 'GSF Identity Network — 100 Accounts';
 
 const NODE_TYPE_NAMES = {
   1: 'Canonical Account',
@@ -87,19 +89,52 @@ function ensureLinkType(graphTypeId, purpose) {
   return row.id;
 }
 
+// Insert one canonical hub + 3 source spokes + 3 links into an existing graph.
+function insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV) {
+  const { account_id, account_name, account_type, custodian_account_num, portfolio_code, fund_code } = account;
+
+  const tMV = Math.round((topazMV[custodian_account_num] ?? 0) * 100) / 100;
+  const eMV = Math.round((emeraldMV[portfolio_code] ?? 0) * 100) / 100;
+  const mvDelta = Math.round((eMV - tMV) * 100) / 100;
+
+  const canonicalInfo = db.prepare(
+    'INSERT INTO Node (graph_id, node_type_id, label, status, metadata) VALUES (?, ?, ?, ?, ?)'
+  ).run(
+    graphId,
+    nodeTypeMap[1],
+    `${account_id}: ${account_name} (${account_type})`,
+    'Active',
+    JSON.stringify({ topaz_mv: tMV, emerald_mv: eMV, mv_delta: mvDelta })
+  );
+
+  const spokes = [
+    { group: 2, label: `Topaz: ${custodian_account_num}` },
+    { group: 3, label: `Emerald: ${portfolio_code}` },
+    { group: 4, label: `Ruby: ${fund_code}` },
+  ];
+
+  for (const spoke of spokes) {
+    const spokeInfo = db.prepare(
+      'INSERT INTO Node (graph_id, node_type_id, label, status) VALUES (?, ?, ?, ?)'
+    ).run(graphId, nodeTypeMap[spoke.group], spoke.label, 'Active');
+
+    db.prepare(
+      'INSERT INTO Link (graph_id, source_node_id, target_node_id, link_type_id, status) VALUES (?, ?, ?, ?, ?)'
+    ).run(graphId, canonicalInfo.lastInsertRowid, spokeInfo.lastInsertRowid, appearsAsId, 'Active');
+  }
+}
+
 function run() {
   const accounts = parseCSV(path.join(SEED_DIR, 'dw_account.csv'));
   const topazPositions = parseCSV(path.join(SEED_DIR, 'positions_topaz.csv'));
   const emeraldPositions = parseCSV(path.join(SEED_DIR, 'positions_emerald.csv'));
 
-  // Aggregate Topaz MV by custodian account number
   const topazMV = {};
   for (const row of topazPositions) {
     const key = row['ACCT_NUM'];
     topazMV[key] = (topazMV[key] ?? 0) + parseFloat(row['MKT_VAL'] || 0);
   }
 
-  // Aggregate Emerald MV by portfolio code
   const emeraldMV = {};
   for (const row of emeraldPositions) {
     const key = row['portfolioId'];
@@ -110,65 +145,52 @@ function run() {
   const nodeTypeMap = ensureNodeTypes(graphTypeId);
   const appearsAsId = ensureLinkType(graphTypeId, 'Appears As');
 
-  const existing = db.prepare(
+  // Combined graph — all 100 accounts
+  const combinedExists = db.prepare(
     'SELECT id FROM Graph WHERE graph_type_id = ? AND name = ?'
-  ).get(graphTypeId, GRAPH_NAME);
-  if (existing) {
-    console.log(`Already exists, skipping: "${GRAPH_NAME}"`);
-    return;
+  ).get(graphTypeId, COMBINED_GRAPH_NAME);
+
+  if (combinedExists) {
+    console.log(`Already exists, skipping: "${COMBINED_GRAPH_NAME}"`);
+  } else {
+    const result = db.transaction(() => {
+      const { lastInsertRowid: graphId } = db.prepare(
+        'INSERT INTO Graph (graph_type_id, name, status) VALUES (?, ?, ?)'
+      ).run(graphTypeId, COMBINED_GRAPH_NAME, 'Active');
+      for (const account of accounts) {
+        insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV);
+      }
+      return graphId;
+    })();
+    console.log(`Imported: "${COMBINED_GRAPH_NAME}" (${accounts.length * 4} nodes, ${accounts.length * 3} links)`);
   }
 
-  const doImport = db.transaction(() => {
-    const graphInfo = db.prepare(
-      'INSERT INTO Graph (graph_type_id, name, status) VALUES (?, ?, ?)'
-    ).run(graphTypeId, GRAPH_NAME, 'Active');
-    const graphId = graphInfo.lastInsertRowid;
+  // Individual graphs — one per account
+  let created = 0;
+  let skipped = 0;
 
-    let nodeCount = 0;
-    let linkCount = 0;
+  for (const account of accounts) {
+    const graphName = `GSF: ${account.account_name} (${account.account_type})`;
+    const exists = db.prepare(
+      'SELECT id FROM Graph WHERE graph_type_id = ? AND name = ?'
+    ).get(graphTypeId, graphName);
 
-    for (const account of accounts) {
-      const { account_id, account_name, account_type, custodian_account_num, portfolio_code, fund_code } = account;
-
-      const tMV = Math.round((topazMV[custodian_account_num] ?? 0) * 100) / 100;
-      const eMV = Math.round((emeraldMV[portfolio_code] ?? 0) * 100) / 100;
-      const mvDelta = Math.round((eMV - tMV) * 100) / 100;
-
-      const canonicalInfo = db.prepare(
-        'INSERT INTO Node (graph_id, node_type_id, label, status, metadata) VALUES (?, ?, ?, ?, ?)'
-      ).run(
-        graphId,
-        nodeTypeMap[1],
-        `${account_id}: ${account_name} (${account_type})`,
-        'Active',
-        JSON.stringify({ topaz_mv: tMV, emerald_mv: eMV, mv_delta: mvDelta })
-      );
-      nodeCount++;
-
-      const spokes = [
-        { group: 2, label: `Topaz: ${custodian_account_num}` },
-        { group: 3, label: `Emerald: ${portfolio_code}` },
-        { group: 4, label: `Ruby: ${fund_code}` },
-      ];
-
-      for (const spoke of spokes) {
-        const spokeInfo = db.prepare(
-          'INSERT INTO Node (graph_id, node_type_id, label, status) VALUES (?, ?, ?, ?)'
-        ).run(graphId, nodeTypeMap[spoke.group], spoke.label, 'Active');
-        nodeCount++;
-
-        db.prepare(
-          'INSERT INTO Link (graph_id, source_node_id, target_node_id, link_type_id, status) VALUES (?, ?, ?, ?, ?)'
-        ).run(graphId, canonicalInfo.lastInsertRowid, spokeInfo.lastInsertRowid, appearsAsId, 'Active');
-        linkCount++;
-      }
+    if (exists) {
+      skipped++;
+      continue;
     }
 
-    return { nodeCount, linkCount };
-  });
+    db.transaction(() => {
+      const { lastInsertRowid: graphId } = db.prepare(
+        'INSERT INTO Graph (graph_type_id, name, status) VALUES (?, ?, ?)'
+      ).run(graphTypeId, graphName, 'Active');
+      insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV);
+    })();
+    created++;
+  }
 
-  const result = doImport();
-  console.log(`Imported: "${GRAPH_NAME}" (${result.nodeCount} nodes, ${result.linkCount} links)`);
+  if (created > 0) console.log(`Imported: ${created} individual account graphs (4 nodes, 3 links each)`);
+  if (skipped > 0) console.log(`Skipped: ${skipped} individual graphs already in DB`);
 }
 
 run();
