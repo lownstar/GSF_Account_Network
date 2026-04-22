@@ -181,19 +181,23 @@
 
     function nodeDisplayLabel(node, mode) {
       if (node.group === 1) {
+        // Canonical hub: always show account ID
         return node.id.split(':')[0].trim();
       }
+      if (mode === 'none') return '';
+      // Source spoke: source code on line 1, selected metric on line 2
+      const sourceCode = node.id.split(': ')[1] ?? node.id;
       if (mode === 'mv' && node.metadata?.mv !== undefined) {
-        return '$' + (node.metadata.mv / 1e6).toFixed(2) + 'M';
+        return sourceCode + '\n$' + (node.metadata.mv / 1e6).toFixed(2) + 'M';
       }
-      return '';
+      return sourceCode;
     }
 
     function nodeThreeObjectFn(node) {
       const text = nodeDisplayLabel(node, labelMode);
       if (!text) return false;
       const sprite = new SpriteText(text);
-      sprite.color = NODE_COLORS[node.group] ?? '#fff';
+      sprite.color = '#fff';
       sprite.textHeight = node.group === 1 ? 2.5 : 3.5;
       sprite.backgroundColor = 'rgba(0,0,0,0.5)';
       sprite.padding = 1.5;
