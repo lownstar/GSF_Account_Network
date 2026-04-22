@@ -97,6 +97,8 @@
     #info-panel .hint { color: #555; font-style: italic; }
   </style>
 
+  <script src="src/three.min.js"></script>
+  <script src="src/three-spritetext.min.js"></script>
   <script src="src/3d-force-graph.min.js"></script>
   <script src="src/d3v5/d3.min.js"></script>
 </head>
@@ -113,6 +115,11 @@
       <option value="bu">Bottom-Up</option>
       <option value="lr">Left-Right</option>
       <option value="radialout">Radial</option>
+    </select>
+    <h1>Node Label</h1>
+    <select id="label-select">
+      <option value="none">None</option>
+      <option value="mv" selected>Market Value</option>
     </select>
     <div id="meta">
       <span class="meta-pill" id="meta-type">—</span>
@@ -160,12 +167,52 @@
       Graph.dagMode(mode).dagLevelDistance(65);
     });
 
+    let labelMode = 'mv';
+
+    const NODE_COLORS = {
+      1: '#FFD700',  // Gold     — Canonical account
+      2: '#4A90D9',  // Blue     — Topaz
+      3: '#2ECC71',  // Green    — Emerald
+      4: '#E74C3C',  // Red      — Ruby
+      5: '#85BAE8',  // Lt. Blue — Topaz sub-account
+      6: '#82E0AA',  // Lt. Green — Emerald sub-account
+      7: '#F1948A',  // Lt. Red  — Ruby sub-account
+    };
+
+    function nodeDisplayLabel(node, mode) {
+      if (node.group === 1) {
+        return node.id.split(':')[0].trim();
+      }
+      if (mode === 'mv' && node.metadata?.mv !== undefined) {
+        return '$' + (node.metadata.mv / 1e6).toFixed(2) + 'M';
+      }
+      return '';
+    }
+
+    function nodeThreeObjectFn(node) {
+      const text = nodeDisplayLabel(node, labelMode);
+      if (!text) return false;
+      const sprite = new SpriteText(text);
+      sprite.color = NODE_COLORS[node.group] ?? '#fff';
+      sprite.textHeight = node.group === 1 ? 2.5 : 3.5;
+      sprite.backgroundColor = 'rgba(0,0,0,0.5)';
+      sprite.padding = 1.5;
+      sprite.position.set(0, 8, 0);
+      return sprite;
+    }
+
+    document.getElementById('label-select').addEventListener('change', e => {
+      labelMode = e.target.value;
+      Graph.nodeThreeObject(nodeThreeObjectFn);
+    });
+
     const elem = document.getElementById('3d-graph');
 
     const Graph = ForceGraph3D()
       (elem)
       .onDagError(() => false)
-      .nodeLabel('')
+      .nodeThreeObjectExtend(true)
+      .nodeThreeObject(nodeThreeObjectFn)
       .nodeOpacity(0.8)
       .linkLabel('purpose')
       .linkOpacity(0.8)
@@ -181,7 +228,7 @@
         }
       })
       .onLinkHover(link => elem.style.cursor = link ? 'pointer' : null)
-      .nodeAutoColorBy('group')
+      .nodeColor(node => NODE_COLORS[node.group] ?? '#fff')
       .onNodeHover(node => {
         elem.style.cursor = node ? 'pointer' : null;
         if (!node) return;
