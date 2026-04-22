@@ -1,6 +1,8 @@
 # GSF Account Network
 
-A 3D interactive visualization tool for hierarchical node networks. Originally built to map investment account relationships from a financial services database. Now evolving into a general-purpose network visualization platform backed by SQLite and a REST API, and planned as a complementary demo alongside the [GSF Semantic Pipeline](https://github.com/lownstar/GSF_Semantic_Pipeline).
+A 3D interactive visualization of the multi-source identity problem in financial data. Each canonical account from the GSF synthetic dataset is shown as a hub node connected to its three source-system representations (Topaz, Emerald, Ruby) — making the ambiguity that the [GSF Semantic Pipeline](https://github.com/lownstar/GSF_Semantic_Pipeline) resolves visible and intuitive.
+
+The two demos tell a connected story: this visualizer poses the question ("why does Topaz report a different market value than Emerald for the same account?"), and the pipeline answers it.
 
 ---
 
@@ -12,10 +14,10 @@ A 3D interactive visualization tool for hierarchical node networks. Originally b
 
 ## What It Does
 
-- Renders any node/link graph as an interactive 3D force-directed network
+- Renders node/link graphs as an interactive 3D force-directed network
 - Supports multiple named graphs selectable from a top-bar dropdown
 - Layout modes: Free, Top-Down, Bottom-Up, Left-Right, Radial
-- Color-codes links by status (Active, Shell, Pending, Inactive, Paused, Closed)
+- Color-codes links by status (Active=green, Closed/Terminated=red)
 - Click a node to zoom in; drag a node to pin it
 
 ---
@@ -39,23 +41,25 @@ npm start
 # → http://localhost:3000
 ```
 
-Requires Node.js 18+. The SQLite database (`db/network.db`) must be seeded — see **Data Seeding** below.
+Requires Node.js 18+. The SQLite database (`db/network.db`) is not committed — seed it before use.
 
 ---
 
 ## Data Seeding
 
-The database is not committed. Import client graph files from `json/`:
+All data is synthetic. Seed the database from the GSF test graph:
 
 ```bash
-# Single file
-node scripts/importJson.js json/99.json
-
-# Bulk (bash)
-for f in json/*.json; do node scripts/importJson.js "$f"; done
+node scripts/importGsfTest.js
 ```
 
-The import script is idempotent — re-running skips graphs already in the database.
+For the full 100-account GSF identity network (requires the [GSF Semantic Pipeline](https://github.com/lownstar/GSF_Semantic_Pipeline) repo cloned as a sibling directory):
+
+```bash
+node scripts/importGSF.js
+```
+
+Both scripts are idempotent — re-running skips data already in the database.
 
 ---
 
@@ -73,10 +77,12 @@ db/
   schema.sql            # SQLite schema definition
   network.db            # SQLite database (gitignored)
 scripts/
-  importJson.js         # CLI: import json/*.json files into SQLite
-  obfuscate.js          # Deterministic name/code obfuscation
-  nameMap.json          # Persistent real→fake name mapping
-json/                   # Legacy source data files (not committed)
+  importGsfTest.js      # Seed the 5-account GSF test graph
+  importGSF.js          # Seed the full 100-account GSF identity network (planned)
+json/
+  gsf_test.json         # Synthetic GSF test graph source data
+src/                    # Local library copies (3d-force-graph, D3 v5)
+docs/                   # Build plans and project documentation
 ```
 
 ---
@@ -99,9 +105,4 @@ json/                   # Legacy source data files (not committed)
 
 ## Relationship to GSF Semantic Pipeline
 
-This project is designed to complement the [GSF Semantic Pipeline](https://github.com/lownstar/GSF_Semantic_Pipeline) demo. Planned integration:
-
-- **Multi-Source Identity Network**: Visualize how the same financial account appears across three source systems (Topaz/Emerald/Ruby) before semantic governance resolves them to a single canonical identity
-- **Holdings Network**: Bipartite graph connecting accounts to the securities they hold, colored by asset class
-
-Together the two demos tell a complete story: the pipeline governs and resolves the data; the network visualizes the relationships it enables.
+This project is the visual companion to the [GSF Semantic Pipeline](https://github.com/lownstar/GSF_Semantic_Pipeline). The pipeline governs and resolves account identity across three source systems; this visualizer makes those cross-system relationships — and the market value discrepancies they produce — visible in 3D.

@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Serve static files (index.html, src/, json/) from project root
+// Serve static files (index.html, src/) from project root
 app.use(express.static(path.join(__dirname, '..')));
 
 // API routes

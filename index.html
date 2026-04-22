@@ -63,7 +63,7 @@
 <body>
 
   <nav id="top-bar">
-    <h1>Account Network</h1>
+    <h1>GSF Account Network</h1>
     <select id="graph-select"><option disabled selected>Loading...</option></select>
     <h1>Graph Layout</h1>
     <select id="layout-select">
@@ -79,7 +79,7 @@
     </div>
   </nav>
   <div id="3d-graph"></div>
-  
+
   <script>
     let graphList = [];
 
@@ -124,28 +124,17 @@
       .nodeOpacity(0.8)
       .linkLabel('purpose')
       .linkOpacity(0.8)
-      //.linkWidth(0.4)
       .nodeResolution(8)
-      //.linkDirectionalParticles(1)
       .linkCurvature('curvature')
       .linkCurveRotation('rotation')
       .linkColor(link => {
         switch (link.status) {
-          case "Active" : return "green";
-          case "Shell" : return "yellow";
-          case "Pending" : return "blue";
-          case "Pending Approval" : return "blue";
-          case "Inactive" : return "gray";
-          case "Open" : return "green";
-          case "Paused" : return "pink"; 
-          case "Paused - Pending Termination" : return "pink";
-          case "Closed" : return "red";
-          case "Terminated" : return "red";
-          default: return "white"; 
+          case 'Active':     return 'green';
+          case 'Closed':
+          case 'Terminated': return 'red';
+          default:           return 'white';
         }
       })
-      //.linkAutoColorBy('status')
-      //.linkDirectionalParticleColor('red')
       .onLinkHover(link => elem.style.cursor = link ? 'pointer' : null)
       .nodeAutoColorBy('group')
       .onNodeHover(node => elem.style.cursor = node ? 'pointer' : null)
@@ -154,20 +143,16 @@
         node.fy = node.y;
         node.fz = node.z;
       })
-      // .onNodeRightClick(node => Graph && Graph.nodeLabel('status'))
       .onNodeClick(node => {
-        // Aim at node from outside it
         const distance = 200;
         const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
-
         Graph.cameraPosition(
-          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }, // new position
-          node, // lookAt ({ x, y, z })
-          3000  // ms transition duration
+          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+          node,
+          3000
         );
       });
 
     loadGraphList();
   </script>
-  <!-- <div id="validation"><h3>ValidationForm</h3></div> -->
 </body>
