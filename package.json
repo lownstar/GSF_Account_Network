@@ -1,0 +1,25 @@
+{
+  "name": "gsf-account-network",
+  "version": "1.0.0",
+  "description": "Account Network graph",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lownstar/GSF_Account_Network.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lownstar/GSF_Account_Network/issues"
+  },
+  "homepage": "https://github.com/lownstar/GSF_Account_Network#readme",
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "express": "^5.2.1"
+  }
+}

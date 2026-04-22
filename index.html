@@ -1,0 +1,173 @@
+<head>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; color: #eee; font-family: sans-serif; }
+
+    #top-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 8px 16px;
+      height: 48px;
+      background: #111;
+      border-bottom: 1px solid #333;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+    }
+
+    #top-bar h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #aaa;
+      white-space: nowrap;
+    }
+
+    #graph-select, #layout-select {
+      background: #222;
+      color: #eee;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    #graph-select { min-width: 200px; }
+    #layout-select { min-width: 130px; }
+
+    #meta {
+      display: flex;
+      gap: 8px;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .meta-pill {
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 2px 10px;
+    }
+
+    #3d-graph {
+      position: fixed;
+      top: 48px; left: 0; right: 0; bottom: 0;
+    }
+  </style>
+
+  <script src="src/3d-force-graph.min.js"></script>
+  <script src="src/d3v5/d3.min.js"></script>
+</head>
+
+<body>
+
+  <nav id="top-bar">
+    <h1>Account Network</h1>
+    <select id="graph-select"><option disabled selected>Loading...</option></select>
+    <h1>Graph Layout</h1>
+    <select id="layout-select">
+      <option value="null">Free</option>
+      <option value="td">Top-Down</option>
+      <option value="bu">Bottom-Up</option>
+      <option value="lr">Left-Right</option>
+      <option value="radialout">Radial</option>
+    </select>
+    <div id="meta">
+      <span class="meta-pill" id="meta-type">—</span>
+      <span class="meta-pill" id="meta-status">—</span>
+    </div>
+  </nav>
+  <div id="3d-graph"></div>
+  
+  <script>
+    let graphList = [];
+
+    async function loadGraphList() {
+      const res = await fetch('/api/graphs');
+      graphList = await res.json();
+
+      const sel = document.getElementById('graph-select');
+      sel.innerHTML = '';
+      graphList.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = g.name;
+        sel.appendChild(opt);
+      });
+
+      if (graphList.length > 0) selectGraph(graphList[0]);
+    }
+
+    function selectGraph(g) {
+      document.getElementById('meta-type').textContent = g.graph_type;
+      document.getElementById('meta-status').textContent = g.status;
+      if (Graph) Graph.jsonUrl(`/api/graphs/${g.id}`);
+    }
+
+    document.getElementById('graph-select').addEventListener('change', e => {
+      const g = graphList.find(x => x.id == e.target.value);
+      if (g) selectGraph(g);
+    });
+
+    document.getElementById('layout-select').addEventListener('change', e => {
+      const mode = e.target.value === 'null' ? null : e.target.value;
+      Graph.dagMode(mode).dagLevelDistance(65);
+    });
+
+    const elem = document.getElementById('3d-graph');
+
+    const Graph = ForceGraph3D()
+      (elem)
+      .onDagError(() => false)
+      .nodeLabel('id')
+      .nodeOpacity(0.8)
+      .linkLabel('purpose')
+      .linkOpacity(0.8)
+      //.linkWidth(0.4)
+      .nodeResolution(8)
+      //.linkDirectionalParticles(1)
+      .linkCurvature('curvature')
+      .linkCurveRotation('rotation')
+      .linkColor(link => {
+        switch (link.status) {
+          case "Active" : return "green";
+          case "Shell" : return "yellow";
+          case "Pending" : return "blue";
+          case "Pending Approval" : return "blue";
+          case "Inactive" : return "gray";
+          case "Open" : return "green";
+          case "Paused" : return "pink"; 
+          case "Paused - Pending Termination" : return "pink";
+          case "Closed" : return "red";
+          case "Terminated" : return "red";
+          default: return "white"; 
+        }
+      })
+      //.linkAutoColorBy('status')
+      //.linkDirectionalParticleColor('red')
+      .onLinkHover(link => elem.style.cursor = link ? 'pointer' : null)
+      .nodeAutoColorBy('group')
+      .onNodeHover(node => elem.style.cursor = node ? 'pointer' : null)
+      .onNodeDragEnd(node => {
+        node.fx = node.x;
+        node.fy = node.y;
+        node.fz = node.z;
+      })
+      // .onNodeRightClick(node => Graph && Graph.nodeLabel('status'))
+      .onNodeClick(node => {
+        // Aim at node from outside it
+        const distance = 200;
+        const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+
+        Graph.cameraPosition(
+          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }, // new position
+          node, // lookAt ({ x, y, z })
+          3000  // ms transition duration
+        );
+      });
+
+    loadGraphList();
+  </script>
+  <!-- <div id="validation"><h3>ValidationForm</h3></div> -->
+</body>
