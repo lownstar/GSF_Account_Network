@@ -19,13 +19,18 @@ router.get('/:id', (req, res) => {
   if (!graph) return res.status(404).json({ error: 'Graph not found' });
 
   // Nodes: label maps to 'id' field in 3d-force-graph, display_group maps to 'group'
-  const nodes = db.prepare(`
-    SELECT n.label AS id, nt.display_group AS [group], n.status
+  const rawNodes = db.prepare(`
+    SELECT n.label AS id, nt.display_group AS [group], n.status, n.metadata
     FROM Node n
     JOIN NodeType nt ON nt.id = n.node_type_id
     WHERE n.graph_id = ?
     ORDER BY nt.display_group, n.label
   `).all(req.params.id);
+
+  const nodes = rawNodes.map(n => ({
+    ...n,
+    metadata: n.metadata ? JSON.parse(n.metadata) : undefined,
+  }));
 
   // Raw links with source/target labels and link type name
   const rawLinks = db.prepare(`
