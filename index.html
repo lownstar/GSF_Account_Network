@@ -184,8 +184,7 @@
         // Canonical hub: always show account ID
         return node.id.split(':')[0].trim();
       }
-      if (mode === 'none') return '';
-      // Source spoke: source code on line 1, selected metric on line 2
+      // Source spoke: source code always on line 1, selected metric on line 2
       const sourceCode = node.id.split(': ')[1] ?? node.id;
       if (mode === 'mv' && node.metadata?.mv !== undefined) {
         return sourceCode + '\n$' + (node.metadata.mv / 1e6).toFixed(2) + 'M';
