@@ -90,11 +90,14 @@ function ensureLinkType(graphTypeId, purpose) {
 }
 
 // Insert one canonical hub + 3 source spokes + 3 links into an existing graph.
-function insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV) {
+// MV for each source system lives on its own spoke node; the canonical hub
+// holds a summary (all three MVs + Topaz/Emerald delta) for the overview hover.
+function insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV, rubyMV) {
   const { account_id, account_name, account_type, custodian_account_num, portfolio_code, fund_code } = account;
 
   const tMV = Math.round((topazMV[custodian_account_num] ?? 0) * 100) / 100;
   const eMV = Math.round((emeraldMV[portfolio_code] ?? 0) * 100) / 100;
+  const rMV = Math.round((rubyMV[fund_code] ?? 0) * 100) / 100;
   const mvDelta = Math.round((eMV - tMV) * 100) / 100;
 
   const canonicalInfo = db.prepare(
@@ -104,19 +107,19 @@ function insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emer
     nodeTypeMap[1],
     `${account_id}: ${account_name} (${account_type})`,
     'Active',
-    JSON.stringify({ topaz_mv: tMV, emerald_mv: eMV, mv_delta: mvDelta })
+    JSON.stringify({ topaz_mv: tMV, emerald_mv: eMV, ruby_mv: rMV, mv_delta: mvDelta })
   );
 
   const spokes = [
-    { group: 2, label: `Topaz: ${custodian_account_num}` },
-    { group: 3, label: `Emerald: ${portfolio_code}` },
-    { group: 4, label: `Ruby: ${fund_code}` },
+    { group: 2, label: `Topaz: ${custodian_account_num}`, metadata: { mv: tMV, system: 'Topaz' } },
+    { group: 3, label: `Emerald: ${portfolio_code}`,      metadata: { mv: eMV, system: 'Emerald' } },
+    { group: 4, label: `Ruby: ${fund_code}`,              metadata: { mv: rMV, system: 'Ruby' } },
   ];
 
   for (const spoke of spokes) {
     const spokeInfo = db.prepare(
-      'INSERT INTO Node (graph_id, node_type_id, label, status) VALUES (?, ?, ?, ?)'
-    ).run(graphId, nodeTypeMap[spoke.group], spoke.label, 'Active');
+      'INSERT INTO Node (graph_id, node_type_id, label, status, metadata) VALUES (?, ?, ?, ?, ?)'
+    ).run(graphId, nodeTypeMap[spoke.group], spoke.label, 'Active', JSON.stringify(spoke.metadata));
 
     db.prepare(
       'INSERT INTO Link (graph_id, source_node_id, target_node_id, link_type_id, status) VALUES (?, ?, ?, ?, ?)'
@@ -128,6 +131,7 @@ function run() {
   const accounts = parseCSV(path.join(SEED_DIR, 'dw_account.csv'));
   const topazPositions = parseCSV(path.join(SEED_DIR, 'positions_topaz.csv'));
   const emeraldPositions = parseCSV(path.join(SEED_DIR, 'positions_emerald.csv'));
+  const rubyPositions = parseCSV(path.join(SEED_DIR, 'positions_ruby.csv'));
 
   const topazMV = {};
   for (const row of topazPositions) {
@@ -139,6 +143,12 @@ function run() {
   for (const row of emeraldPositions) {
     const key = row['portfolioId'];
     emeraldMV[key] = (emeraldMV[key] ?? 0) + parseFloat(row['marketValue'] || 0);
+  }
+
+  const rubyMV = {};
+  for (const row of rubyPositions) {
+    const key = row['fund_code'];
+    rubyMV[key] = (rubyMV[key] ?? 0) + parseFloat(row['total_nav_value'] || 0);
   }
 
   const graphTypeId = ensureGraphType();
@@ -158,7 +168,7 @@ function run() {
         'INSERT INTO Graph (graph_type_id, name, status) VALUES (?, ?, ?)'
       ).run(graphTypeId, COMBINED_GRAPH_NAME, 'Active');
       for (const account of accounts) {
-        insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV);
+        insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV, rubyMV);
       }
       return graphId;
     })();
@@ -184,7 +194,7 @@ function run() {
       const { lastInsertRowid: graphId } = db.prepare(
         'INSERT INTO Graph (graph_type_id, name, status) VALUES (?, ?, ?)'
       ).run(graphTypeId, graphName, 'Active');
-      insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV);
+      insertAccount(graphId, account, nodeTypeMap, appearsAsId, topazMV, emeraldMV, rubyMV);
     })();
     created++;
   }
