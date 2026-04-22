@@ -107,7 +107,7 @@
 
   <nav id="top-bar">
     <h1>GSF Account Network</h1>
-    <select id="graph-select"><option disabled selected>Loading...</option></select>
+    <select id="graph-select"><option value="" disabled selected>— Select an account —</option></select>
     <h1>Graph Layout</h1>
     <select id="layout-select">
       <option value="null">Free</option>
@@ -129,7 +129,7 @@
   <div id="3d-graph"></div>
 
   <div id="info-panel">
-    <div class="hint">Hover a node to explore</div>
+    <div class="hint">Select an account from the dropdown above</div>
   </div>
 
   <script>
@@ -140,20 +140,19 @@
       graphList = await res.json();
 
       const sel = document.getElementById('graph-select');
-      sel.innerHTML = '';
+      sel.innerHTML = '<option value="" disabled selected>— Select an account —</option>';
       graphList.forEach(g => {
         const opt = document.createElement('option');
         opt.value = g.id;
         opt.textContent = g.name;
         sel.appendChild(opt);
       });
-
-      if (graphList.length > 0) selectGraph(graphList[0]);
     }
 
     function selectGraph(g) {
       document.getElementById('meta-type').textContent = g.graph_type;
       document.getElementById('meta-status').textContent = g.status;
+      document.getElementById('info-panel').innerHTML = '<div class="hint">Hover a node to explore</div>';
       if (Graph) Graph.jsonUrl(`/api/graphs/${g.id}`);
     }
 
