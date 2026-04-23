@@ -120,6 +120,8 @@
     <select id="label-select">
       <option value="none">None</option>
       <option value="mv" selected>Market Value</option>
+      <option value="cost_basis">Cost Basis</option>
+      <option value="unrealized_gl">Unrealized G/L</option>
     </select>
     <div id="meta">
       <span class="meta-pill" id="meta-type">—</span>
@@ -176,17 +178,31 @@
       5: '#1976D2',  // Med. Blue   — Topaz sub-account
       6: '#2E7D32',  // Med. Green  — Emerald sub-account
       7: '#C62828',  // Med. Red    — Ruby sub-account
+      8: '#6A0DAD',  // Purple      — Client/Household
     };
 
     function nodeDisplayLabel(node, mode) {
+      if (node.group === 8) {
+        // Client/Household hub: show client ID
+        return node.id.split(':')[0].trim();
+      }
       if (node.group === 1) {
         // Canonical hub: always show account ID
         return node.id.split(':')[0].trim();
       }
       // Source spoke: source code always on line 1, selected metric on line 2
       const sourceCode = node.id.split(': ')[1] ?? node.id;
-      if (mode === 'mv' && node.metadata?.mv !== undefined) {
-        return sourceCode + '\n$' + (node.metadata.mv / 1e6).toFixed(2) + 'M';
+      const m = node.metadata;
+      if (mode === 'mv' && m?.mv !== undefined) {
+        return sourceCode + '\n$' + (m.mv / 1e6).toFixed(2) + 'M';
+      }
+      if (mode === 'cost_basis' && m?.cost_basis !== undefined) {
+        return sourceCode + '\n$' + (m.cost_basis / 1e6).toFixed(2) + 'M CB';
+      }
+      if (mode === 'unrealized_gl' && m !== undefined) {
+        return m.unrealized_gl !== null
+          ? sourceCode + '\n$' + (m.unrealized_gl / 1e6).toFixed(2) + 'M GL'
+          : sourceCode + '\nN/A';
       }
       return sourceCode;
     }
@@ -196,7 +212,7 @@
       if (!text) return false;
       const sprite = new SpriteText(text);
       sprite.color = '#fff';
-      sprite.textHeight = node.group === 1 ? 2.5 : 3.5;
+      sprite.textHeight = (node.group === 1 || node.group === 8) ? 2.5 : 3.5;
       sprite.backgroundColor = 'rgba(0,0,0,0.5)';
       sprite.padding = 1.5;
       sprite.position.set(0, 8, 0);
@@ -238,21 +254,47 @@
         const m = node.metadata;
         const fmt = v => '$' + (v / 1e6).toFixed(2) + 'M';
 
-        if (m && m.topaz_mv !== undefined && m.emerald_mv !== undefined) {
-          // Canonical hub — show all three MVs and delta
+        const recordCounts = (tc, ec, rc) =>
+          `<div class="panel-row"><span class="label">Records</span><span>T:${tc} pos · E:${ec} lots · R:${rc} pos</span></div>`;
+
+        if (m && m.total_topaz_mv !== undefined) {
+          // Client/Household hub — rolled-up MVs across all accounts
           const deltaSign = m.mv_delta >= 0 ? '+' : '';
           panel.innerHTML = `
             <div class="panel-title">${node.id}</div>
+            <div class="panel-row"><span class="label">Accounts</span><span>${m.account_count}</span></div>
+            <div class="panel-row"><span class="label">Topaz Total</span><span>${fmt(m.total_topaz_mv)}</span></div>
+            <div class="panel-row"><span class="label">Emerald Total</span><span>${fmt(m.total_emerald_mv)}</span></div>
+            <div class="panel-row"><span class="label">Ruby Total</span><span>${fmt(m.total_ruby_mv)}</span></div>
+            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span><span>${deltaSign}${fmt(m.mv_delta)}</span></div>
+            ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
+        } else if (m && m.topaz_mv !== undefined && m.emerald_mv !== undefined) {
+          // Canonical account hub — all three MVs, delta, strategy, record counts
+          const deltaSign = m.mv_delta >= 0 ? '+' : '';
+          const strategyRow = m.strategy_type
+            ? `<div class="panel-row"><span class="label">Strategy</span><span>${m.strategy_type}</span></div>`
+            : '';
+          panel.innerHTML = `
+            <div class="panel-title">${node.id}</div>
+            ${strategyRow}
             <div class="panel-row"><span class="label">Topaz MV</span><span>${fmt(m.topaz_mv)}</span></div>
             <div class="panel-row"><span class="label">Emerald MV</span><span>${fmt(m.emerald_mv)}</span></div>
             <div class="panel-row"><span class="label">Ruby MV</span><span>${fmt(m.ruby_mv)}</span></div>
-            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span><span>${deltaSign}${fmt(m.mv_delta)}</span></div>`;
+            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span><span>${deltaSign}${fmt(m.mv_delta)}</span></div>
+            ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
         } else if (m && m.mv !== undefined) {
-          // Source spoke — show system name, source ID, and its own MV
+          // Source spoke — system, MV, and record count with grain label
+          const grain = m.system === 'Emerald' ? 'lots' : 'positions';
+          const glRow = m.unrealized_gl !== null && m.unrealized_gl !== undefined
+            ? `<div class="panel-row"><span class="label">Unrealized G/L</span><span>${fmt(m.unrealized_gl)}</span></div>`
+            : `<div class="panel-row"><span class="label">Unrealized G/L</span><span style="color:#666">not reported</span></div>`;
           panel.innerHTML = `
             <div class="panel-title">${node.id}</div>
             <div class="panel-row"><span class="label">System</span><span>${m.system}</span></div>
-            <div class="panel-row"><span class="label">Market Value</span><span>${fmt(m.mv)}</span></div>`;
+            <div class="panel-row"><span class="label">Market Value</span><span>${fmt(m.mv)}</span></div>
+            <div class="panel-row"><span class="label">Cost Basis</span><span>${fmt(m.cost_basis)}</span></div>
+            ${glRow}
+            <div class="panel-row"><span class="label">Records</span><span>${m.record_count} ${grain}</span></div>`;
         } else {
           panel.innerHTML = `<div class="panel-title">${node.id}</div>`;
         }
