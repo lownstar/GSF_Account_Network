@@ -23,7 +23,7 @@
       white-space: nowrap;
     }
 
-    #graph-select, #layout-select {
+    #graph-select, #layout-select, #type-filter, #label-select {
       background: #222;
       color: #eee;
       border: 1px solid #444;
@@ -33,8 +33,27 @@
       cursor: pointer;
     }
 
+    #type-filter  { min-width: 150px; }
     #graph-select { min-width: 200px; }
     #layout-select { min-width: 130px; }
+
+    #legend {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(17,17,17,0.85);
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: #aaa;
+      line-height: 1.9;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
     #meta {
       display: flex;
@@ -107,7 +126,12 @@
 
   <nav id="top-bar">
     <h1>GSF Account Network</h1>
-    <select id="graph-select"><option value="" disabled selected>— Select an account —</option></select>
+    <select id="type-filter">
+      <option value="all">All Graphs</option>
+      <option value="GSF Multi-Source Identity">Account Graphs</option>
+      <option value="GSF Client Hierarchy">Client Hierarchy</option>
+    </select>
+    <select id="graph-select"><option value="" disabled selected>— Select a graph —</option></select>
     <h1>Graph Layout</h1>
     <select id="layout-select">
       <option value="null">Free</option>
@@ -134,22 +158,40 @@
     <div class="hint">Select an account from the dropdown above</div>
   </div>
 
+  <div id="legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#CC8800"></span> Canonical Account</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#1565C0"></span> Topaz Record</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#1B5E20"></span> Emerald Record</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#B71C1C"></span> Ruby Record</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#6A0DAD"></span> Client / Household</div>
+  </div>
+
   <script>
     let graphList = [];
 
-    async function loadGraphList() {
-      const res = await fetch('/api/graphs');
-      graphList = await res.json();
-
+    function populateGraphSelect(typeFilter) {
       const sel = document.getElementById('graph-select');
-      sel.innerHTML = '<option value="" disabled selected>— Select an account —</option>';
-      graphList.forEach(g => {
+      sel.innerHTML = '<option value="" disabled selected>— Select a graph —</option>';
+      const visible = typeFilter === 'all'
+        ? graphList
+        : graphList.filter(g => g.graph_type === typeFilter);
+      visible.forEach(g => {
         const opt = document.createElement('option');
         opt.value = g.id;
         opt.textContent = g.name;
         sel.appendChild(opt);
       });
     }
+
+    async function loadGraphList() {
+      const res = await fetch('/api/graphs');
+      graphList = await res.json();
+      populateGraphSelect(document.getElementById('type-filter').value);
+    }
+
+    document.getElementById('type-filter').addEventListener('change', e => {
+      populateGraphSelect(e.target.value);
+    });
 
     function selectGraph(g) {
       document.getElementById('meta-type').textContent = g.graph_type;
@@ -257,20 +299,27 @@
         const recordCounts = (tc, ec, rc) =>
           `<div class="panel-row"><span class="label">Records</span><span>T:${tc} pos · E:${ec} lots · R:${rc} pos</span></div>`;
 
+        const deltaSpan = (delta) => {
+          const abs = Math.abs(delta);
+          const color = abs > 1e6 ? '#ff4444' : abs > 1e5 ? '#ff9900' : null;
+          const sign = delta >= 0 ? '+' : '';
+          return color
+            ? `<span style="color:${color}">${sign}${fmt(delta)}</span>`
+            : `<span>${sign}${fmt(delta)}</span>`;
+        };
+
         if (m && m.total_topaz_mv !== undefined) {
           // Client/Household hub — rolled-up MVs across all accounts
-          const deltaSign = m.mv_delta >= 0 ? '+' : '';
           panel.innerHTML = `
             <div class="panel-title">${node.id}</div>
             <div class="panel-row"><span class="label">Accounts</span><span>${m.account_count}</span></div>
             <div class="panel-row"><span class="label">Topaz Total</span><span>${fmt(m.total_topaz_mv)}</span></div>
             <div class="panel-row"><span class="label">Emerald Total</span><span>${fmt(m.total_emerald_mv)}</span></div>
             <div class="panel-row"><span class="label">Ruby Total</span><span>${fmt(m.total_ruby_mv)}</span></div>
-            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span><span>${deltaSign}${fmt(m.mv_delta)}</span></div>
+            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span>${deltaSpan(m.mv_delta)}</div>
             ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
         } else if (m && m.topaz_mv !== undefined && m.emerald_mv !== undefined) {
           // Canonical account hub — all three MVs, delta, strategy, record counts
-          const deltaSign = m.mv_delta >= 0 ? '+' : '';
           const strategyRow = m.strategy_type
             ? `<div class="panel-row"><span class="label">Strategy</span><span>${m.strategy_type}</span></div>`
             : '';
@@ -280,7 +329,7 @@
             <div class="panel-row"><span class="label">Topaz MV</span><span>${fmt(m.topaz_mv)}</span></div>
             <div class="panel-row"><span class="label">Emerald MV</span><span>${fmt(m.emerald_mv)}</span></div>
             <div class="panel-row"><span class="label">Ruby MV</span><span>${fmt(m.ruby_mv)}</span></div>
-            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span><span>${deltaSign}${fmt(m.mv_delta)}</span></div>
+            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span>${deltaSpan(m.mv_delta)}</div>
             ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
         } else if (m && m.mv !== undefined) {
           // Source spoke — system, MV, and record count with grain label
