@@ -190,7 +190,7 @@ function run() {
   let skipped = 0;
 
   for (const account of accounts) {
-    const graphName = `GSF: ${account.account_name} (${account.account_type})`;
+    const graphName = `${account.account_id}: ${account.account_name} (${account.account_type})`;
     const exists = db.prepare(
       'SELECT id FROM Graph WHERE graph_type_id = ? AND name = ?'
     ).get(graphTypeId, graphName);

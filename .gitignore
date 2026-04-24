@@ -83,4 +83,7 @@ scripts/nameMap.json
 
 # IDE / local tooling
 .vs/
-.claude/settings.local.json
+.claude/
+
+# Frontend vendor libs (loaded from CDN in production)
+src/
