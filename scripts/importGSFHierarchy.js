@@ -9,7 +9,9 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../server/db');
 
-const SEED_DIR = path.resolve(__dirname, '../../GSF_Semantic_Pipeline/data/seed_v2');
+const SIBLING_SEED = path.resolve(__dirname, '../../GSF_Semantic_Pipeline/data/seed_v2');
+const SEED_DIR = process.env.SEED_DIR
+  || (fs.existsSync(SIBLING_SEED) ? SIBLING_SEED : path.resolve(__dirname, '../data/seed'));
 const GRAPH_TYPE_NAME = 'GSF Client Hierarchy';
 const CLIENT_GROUP = 8; // display_group for Client/Household (purple in NODE_COLORS)
 
@@ -275,4 +277,5 @@ function run() {
   if (skipped > 0) console.log(`Skipped: ${skipped} graphs already in DB`);
 }
 
-run();
+if (require.main === module) run();
+module.exports = { run };
