@@ -1,4 +1,8 @@
+<!DOCTYPE html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #000; color: #eee; font-family: sans-serif; }
@@ -6,9 +10,10 @@
     #top-bar {
       display: flex;
       align-items: center;
-      gap: 16px;
+      flex-wrap: wrap;
+      gap: 10px 16px;
       padding: 8px 16px;
-      height: 48px;
+      min-height: 48px;
       background: #111;
       border-bottom: 1px solid #333;
       position: fixed;
@@ -21,6 +26,11 @@
       font-weight: 600;
       color: #aaa;
       white-space: nowrap;
+    }
+
+    /* App title stretches to push controls right on wide screens */
+    #top-bar h1:first-child {
+      flex: 1 1 auto;
     }
 
     #graph-select, #layout-select, #type-filter, #label-select {
@@ -72,6 +82,9 @@
     #3d-graph {
       position: fixed;
       top: 48px; left: 0; right: 0; bottom: 0;
+      /* Prevent browser from hijacking touch gestures so
+         Three.js OrbitControls can handle them natively */
+      touch-action: none;
     }
 
     #info-panel {
@@ -79,6 +92,8 @@
       top: 64px;
       right: 16px;
       width: 240px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
       background: #111;
       border: 1px solid #333;
       border-radius: 6px;
@@ -88,6 +103,38 @@
       line-height: 1.7;
       pointer-events: none;
       z-index: 50;
+    }
+
+    /* ── Mobile layout (≤ 600px) ─────────────────────────────── */
+    @media (max-width: 600px) {
+      #top-bar {
+        gap: 6px 10px;
+        padding: 6px 10px;
+      }
+
+      /* Hide secondary labels to save row space */
+      #top-bar h1:not(:first-child) { display: none; }
+
+      #type-filter, #graph-select, #layout-select, #label-select {
+        min-width: 0;
+        flex: 1 1 calc(50% - 10px);
+        font-size: 12px;
+      }
+
+      #meta { font-size: 11px; }
+
+      #info-panel {
+        /* Move to bottom of screen so it doesn't obscure the graph centre */
+        top: auto;
+        bottom: 0;
+        right: 0;
+        left: 0;
+        width: 100%;
+        max-height: 38vh;
+        border-radius: 6px 6px 0 0;
+      }
+
+      #legend { display: none; }
     }
 
     #info-panel .panel-title {
@@ -268,6 +315,20 @@
 
     const elem = document.getElementById('3d-graph');
 
+    // Keep the canvas sized to the space below the top bar.
+    // The bar can grow taller on mobile when controls wrap to two rows,
+    // so we measure its actual rendered height on every resize.
+    function resizeGraph() {
+      const barHeight = document.getElementById('top-bar').offsetHeight;
+      elem.style.top = barHeight + 'px';
+      if (Graph) {
+        Graph.width(elem.offsetWidth).height(elem.offsetHeight);
+      }
+    }
+    window.addEventListener('resize', resizeGraph);
+    // Run once at startup after the bar has rendered
+    requestAnimationFrame(resizeGraph);
+
     const Graph = ForceGraph3D()
       (elem)
       .onDagError(() => false)
@@ -328,41 +389,4 @@
             ${strategyRow}
             <div class="panel-row"><span class="label">Topaz MV</span><span>${fmt(m.topaz_mv)}</span></div>
             <div class="panel-row"><span class="label">Emerald MV</span><span>${fmt(m.emerald_mv)}</span></div>
-            <div class="panel-row"><span class="label">Ruby MV</span><span>${fmt(m.ruby_mv)}</span></div>
-            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span>${deltaSpan(m.mv_delta)}</div>
-            ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
-        } else if (m && m.mv !== undefined) {
-          // Source spoke — system, MV, and record count with grain label
-          const grain = m.system === 'Emerald' ? 'lots' : 'positions';
-          const glRow = m.unrealized_gl !== null && m.unrealized_gl !== undefined
-            ? `<div class="panel-row"><span class="label">Unrealized G/L</span><span>${fmt(m.unrealized_gl)}</span></div>`
-            : `<div class="panel-row"><span class="label">Unrealized G/L</span><span style="color:#666">not reported</span></div>`;
-          panel.innerHTML = `
-            <div class="panel-title">${node.id}</div>
-            <div class="panel-row"><span class="label">System</span><span>${m.system}</span></div>
-            <div class="panel-row"><span class="label">Market Value</span><span>${fmt(m.mv)}</span></div>
-            <div class="panel-row"><span class="label">Cost Basis</span><span>${fmt(m.cost_basis)}</span></div>
-            ${glRow}
-            <div class="panel-row"><span class="label">Records</span><span>${m.record_count} ${grain}</span></div>`;
-        } else {
-          panel.innerHTML = `<div class="panel-title">${node.id}</div>`;
-        }
-      })
-      .onNodeDragEnd(node => {
-        node.fx = node.x;
-        node.fy = node.y;
-        node.fz = node.z;
-      })
-      .onNodeClick(node => {
-        const distance = 200;
-        const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
-        Graph.cameraPosition(
-          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-          node,
-          3000
-        );
-      });
-
-    loadGraphList();
-  </script>
-</body>
+            <div class="panel-row"><
