@@ -389,4 +389,43 @@
             ${strategyRow}
             <div class="panel-row"><span class="label">Topaz MV</span><span>${fmt(m.topaz_mv)}</span></div>
             <div class="panel-row"><span class="label">Emerald MV</span><span>${fmt(m.emerald_mv)}</span></div>
-            <div class="panel-row"><
+            <div class="panel-row"><span class="label">Ruby MV</span><span>${fmt(m.ruby_mv)}</span></div>
+            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span>${deltaSpan(m.mv_delta)}</div>
+            ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
+        } else if (m && m.mv !== undefined) {
+          // Source spoke — system, MV, and record count with grain label
+          const grain = m.system === 'Emerald' ? 'lots' : 'positions';
+          const glRow = m.unrealized_gl !== null && m.unrealized_gl !== undefined
+            ? `<div class="panel-row"><span class="label">Unrealized G/L</span><span>${fmt(m.unrealized_gl)}</span></div>`
+            : `<div class="panel-row"><span class="label">Unrealized G/L</span><span style="color:#666">not reported</span></div>`;
+          panel.innerHTML = `
+            <div class="panel-title">${node.id}</div>
+            <div class="panel-row"><span class="label">System</span><span>${m.system}</span></div>
+            <div class="panel-row"><span class="label">Market Value</span><span>${fmt(m.mv)}</span></div>
+            <div class="panel-row"><span class="label">Cost Basis</span><span>${fmt(m.cost_basis)}</span></div>
+            ${glRow}
+            <div class="panel-row"><span class="label">Records</span><span>${m.record_count} ${grain}</span></div>`;
+        } else {
+          panel.innerHTML = `<div class="panel-title">${node.id}</div>`;
+        }
+      })
+      .onNodeDragEnd(node => {
+        node.fx = node.x;
+        node.fy = node.y;
+        node.fz = node.z;
+      })
+      .onNodeClick(node => {
+        // Scale zoom distance to viewport — desktop stays at 200, narrow mobile ~100
+        const distance = Math.max(100, Math.min(200, window.innerWidth * 0.4));
+        const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+        Graph.cameraPosition(
+          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+          node,
+          3000
+        );
+      });
+
+    loadGraphList();
+  </script>
+</body>
+</html>
