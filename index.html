@@ -216,6 +216,11 @@
   <script>
     let graphList = [];
 
+    const FILTER_MAP = {
+      'account': 'GSF Multi-Source Identity',
+      'client':  'GSF Client Hierarchy',
+    };
+
     function populateGraphSelect(typeFilter) {
       const sel = document.getElementById('graph-select');
       sel.innerHTML = '<option value="" disabled selected>— Select a graph —</option>';
@@ -234,10 +239,71 @@
       const res = await fetch('/api/graphs');
       graphList = await res.json();
       populateGraphSelect(document.getElementById('type-filter').value);
+      applyUrlParams();
+    }
+
+    function applyUrlParams() {
+      const params = new URLSearchParams(location.search);
+
+      const filterParam = params.get('filter');
+      if (filterParam && FILTER_MAP[filterParam]) {
+        document.getElementById('type-filter').value = FILTER_MAP[filterParam];
+        populateGraphSelect(FILTER_MAP[filterParam]);
+      }
+
+      const layoutParam = params.get('layout');
+      if (layoutParam) {
+        document.getElementById('layout-select').value = layoutParam;
+        const mode = layoutParam === 'null' ? null : layoutParam;
+        Graph.dagMode(mode).dagLevelDistance(65);
+      }
+
+      const labelParam = params.get('label');
+      if (labelParam) {
+        document.getElementById('label-select').value = labelParam;
+        labelMode = labelParam;
+        Graph.nodeThreeObject(nodeThreeObjectFn);
+      }
+
+      const graphParam = params.get('graph');
+      if (graphParam) {
+        const g = graphList.find(x => x.name.includes(graphParam));
+        if (g) {
+          document.getElementById('graph-select').value = g.id;
+          selectGraph(g);
+        }
+      }
+    }
+
+    function updateUrl() {
+      const typeFilter = document.getElementById('type-filter').value;
+      const graphSelValue = document.getElementById('graph-select').value;
+      const layout = document.getElementById('layout-select').value;
+      const label = document.getElementById('label-select').value;
+
+      const params = new URLSearchParams();
+
+      const filterCode = Object.keys(FILTER_MAP).find(k => FILTER_MAP[k] === typeFilter);
+      if (filterCode) params.set('filter', filterCode);
+
+      if (graphSelValue) {
+        const g = graphList.find(x => x.id == graphSelValue);
+        if (g) {
+          const match = g.name.match(/\(([^)]+)\)$/);
+          params.set('graph', match ? match[1] : String(g.id));
+        }
+      }
+
+      if (layout !== 'null') params.set('layout', layout);
+      if (label !== 'mv') params.set('label', label);
+
+      const qs = params.toString();
+      history.replaceState(null, '', qs ? '?' + qs : location.pathname);
     }
 
     document.getElementById('type-filter').addEventListener('change', e => {
       populateGraphSelect(e.target.value);
+      updateUrl();
     });
 
     function selectGraph(g) {
@@ -249,12 +315,13 @@
 
     document.getElementById('graph-select').addEventListener('change', e => {
       const g = graphList.find(x => x.id == e.target.value);
-      if (g) selectGraph(g);
+      if (g) { selectGraph(g); updateUrl(); }
     });
 
     document.getElementById('layout-select').addEventListener('change', e => {
       const mode = e.target.value === 'null' ? null : e.target.value;
       Graph.dagMode(mode).dagLevelDistance(65);
+      updateUrl();
     });
 
     let labelMode = 'mv';
@@ -311,6 +378,7 @@
     document.getElementById('label-select').addEventListener('change', e => {
       labelMode = e.target.value;
       Graph.nodeThreeObject(nodeThreeObjectFn);
+      updateUrl();
     });
 
     const elem = document.getElementById('3d-graph');
