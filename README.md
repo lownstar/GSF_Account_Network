@@ -14,15 +14,18 @@ The two demos tell a connected story: this visualizer poses the question ("why d
 
 ## What It Does
 
-- 125 interactive 3D graphs: 100 individual account graphs + 25 client hierarchy graphs + 1 test graph
+- 126 interactive 3D graphs: 100 individual account graphs + 25 client hierarchy graphs + 1 test graph
 - Each account rendered as a 4-node star: canonical hub connected to its Topaz, Emerald, and Ruby source records
 - Client hierarchy graphs show the 3-tier structure: Client → Canonical Accounts → Source Records
+- Opens on a curated default view (a client hierarchy) with a guided walkthrough on first visit
 - Hover panel shows market values across all three systems, delta, cost basis, unrealized G/L, and record counts
+- Figures render to the cent against IBOR tolerances (> $50 material, > $5 small, a penny expected) — rounding to millions hides the very discrepancy being demonstrated
 - Graph type filter: view all graphs, account graphs only, or client hierarchy only
 - Layout modes: Free, Top-Down, Bottom-Up, Left-Right, Radial
-- Node label toggle: None or Market Value floating labels
+- Node label toggle: None, Market Value, Cost Basis, or Unrealized G/L floating labels
 - Click a node to zoom in; drag a node to pin it
 - Mobile-responsive: touch support, adaptive zoom distance
+- Any view is shareable as a URL; selections are written back to the query string
 
 ---
 
@@ -45,7 +48,7 @@ npm run seed   # initialize schema + import all graphs
 npm start      # → http://localhost:3000
 ```
 
-The database is not committed. `npm run seed` creates it and imports all 125 graphs automatically. It is idempotent — safe to re-run.
+The database is not committed. `npm run seed` creates it and imports all 126 graphs automatically. It is idempotent — safe to re-run.
 
 ### Environment Variables
 
@@ -66,13 +69,14 @@ index.html              # Frontend — 3D visualization with top-bar controls
 schema.sql              # SQLite schema definition
 server/
   index.js              # Express entry point
-  db.js                 # better-sqlite3 connection (respects DB_PATH env var)
+  db.js                 # better-sqlite3 READ-ONLY connection (respects DB_PATH env var)
   routes/
-    graphs.js           # Graph CRUD + JSON output for 3d-force-graph
-    graphTypes.js       # Graph type CRUD
+    graphs.js           # Read-only graph JSON output for 3d-force-graph
+    graphTypes.js       # Read-only graph type queries
 db/
   network.db            # SQLite database (gitignored)
 scripts/
+  db.js                 # better-sqlite3 WRITABLE connection — seeders only
   seed.js               # Startup seeder — init schema + import all graphs
   importGsfTest.js      # Seeds the 5-account GSF test graph
   importGSF.js          # Seeds 100 individual account graphs

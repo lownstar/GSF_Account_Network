@@ -53,9 +53,54 @@ Creates 100 individual account graphs (one per account, named `ACC-XXXX: name (t
 
 ---
 
+## Post-Deployment — Hardening & Onboarding (2026-08-02) ✅
+
+**Read-only deployment** (`b11ab90`, `4363d4a`)
+
+The server had been serving the entire project root as static files, so
+`/db/network.db` returned the full SQLite database to any caller, alongside
+server source, `schema.sql` and the seed CSVs. It also carried POST/DELETE
+routes that neither the frontend nor the seeders used.
+
+- Only `index.html` is served; `src/` is mounted for local dev alone
+- All write routes deleted from both routers
+- `server/db.js` opens SQLite `{ readonly: true }` — the web process cannot
+  write even if a write path were reintroduced
+- `scripts/db.js` added as the writable handle for the seeders, which run
+  out-of-process before the server starts
+- `x-powered-by` disabled
+
+**Onboarding** (`db93235`)
+
+- Default landing view: opens on client hierarchy `CLT-005` rather than an
+  empty canvas, matched by name so it resolves across environments
+- 8-step guided tour with a spotlight cut-out; first-visit auto-run stored in
+  `localStorage`, reopened via the `?` button or `?tour=1`
+
+**Reconciliation display** (`db93235`)
+
+The narrative had been undermined by its own formatting: every figure was
+rounded to millions, so three systems reporting $77,787,621.62 / $77,829,481.94
+/ $77,756,482.90 all displayed as `$77.79M`, and a $41,860 break displayed as
+`$0.04M`. The delta thresholds ($1M red, $100k orange) never fired once against
+this dataset.
+
+Rebuilt around IBOR tolerances, which are absolute rather than proportional —
+`> $50` material, `> $5` small, `> $0.01` sub-dollar, else reconciled. Money now
+renders to the cent in a monospace column. Against the current data **98 of 100
+accounts break by more than $50 and none reconciles to the penny**; the worst is
+$41,860.32 on ACC-0078.
+
+**Incidental fix:** `#3d-graph` is an invalid CSS selector (identifiers cannot
+start with a digit), so that rule had never applied — including the
+`touch-action: none` added in `a7b7e46` for mobile gesture handling. Now
+`[id="3d-graph"]`.
+
+---
+
 ## Outstanding
 
-- **`seed.js --reset` flag** — needed when GSF_Semantic_Pipeline regenerates data. Currently requires a manual DB wipe before re-seeding; a `--reset` flag would do it in one command.
+- **`seed.js --reset` flag** — needed when GSF_Semantic_Pipeline regenerates data. Currently requires a manual DB wipe before re-seeding; a `--reset` flag would do it in one command. `scripts/db.js` is now the natural home for it.
 
 ---
 
