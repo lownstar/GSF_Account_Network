@@ -79,7 +79,10 @@
       padding: 2px 10px;
     }
 
-    #3d-graph {
+    /* Attribute selector, not #3d-graph: a CSS identifier cannot start with a
+       digit, so "#3d-graph" is invalid and the browser silently drops the whole
+       rule — including the touch-action below. */
+    [id="3d-graph"] {
       position: fixed;
       top: 48px; left: 0; right: 0; bottom: 0;
       /* Prevent browser from hijacking touch gestures so
@@ -91,7 +94,7 @@
       position: fixed;
       top: 64px;
       right: 16px;
-      width: 240px;
+      width: 288px;
       max-height: calc(100vh - 80px);
       overflow-y: auto;
       background: #111;
@@ -161,6 +164,129 @@
     }
 
     #info-panel .hint { color: #555; font-style: italic; }
+
+    /* Monospace so the three per-system market values align digit-for-digit —
+       the disagreement is only visible when the columns line up. */
+    #info-panel .mv {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    #info-panel .break-note {
+      margin-top: 4px;
+      font-size: 11px;
+      text-align: right;
+    }
+
+    /* ── Help button ─────────────────────────────────────────── */
+    #help-btn {
+      background: #222;
+      color: #aaa;
+      border: 1px solid #444;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      flex: 0 0 auto;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+      cursor: pointer;
+    }
+    #help-btn:hover { background: #2c2c2c; color: #eee; border-color: #CC8800; }
+
+    /* ── Guided tour ─────────────────────────────────────────── */
+    #tour { display: none; }
+    #tour.active { display: block; }
+
+    /* Click-catcher: swallows stray clicks so the graph doesn't spin
+       underneath the tour, and advances on click anywhere. */
+    #tour-catcher {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      cursor: pointer;
+    }
+
+    /* The dimmer IS this element's outer shadow, so the target sits in a
+       genuine cut-out rather than behind a translucent sheet. */
+    #tour-spot {
+      position: fixed;
+      border: 2px solid #CC8800;
+      border-radius: 6px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.74);
+      pointer-events: none;
+      z-index: 201;
+      transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease;
+    }
+    #tour-spot.no-target { border-color: transparent; }
+
+    #tour-card {
+      position: fixed;
+      width: 320px;
+      max-width: calc(100vw - 28px);
+      background: #141414;
+      border: 1px solid #3a3a3a;
+      border-radius: 8px;
+      padding: 14px 16px 12px;
+      z-index: 202;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+    }
+
+    #tour-card h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #CC8800;
+      margin-bottom: 6px;
+    }
+
+    #tour-card p {
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #ccc;
+    }
+
+    #tour-card p + p { margin-top: 8px; }
+    #tour-card b { color: #eee; font-weight: 600; }
+
+    #tour-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    #tour-step { flex: 1 1 auto; font-size: 11px; color: #666; }
+
+    #tour-nav button {
+      background: #222;
+      color: #ccc;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #tour-nav button:hover { background: #2c2c2c; color: #fff; }
+    #tour-nav button.primary {
+      background: #CC8800;
+      border-color: #CC8800;
+      color: #111;
+      font-weight: 600;
+    }
+    #tour-nav button.primary:hover { background: #e09a00; }
+    #tour-skip {
+      background: none !important;
+      border: none !important;
+      color: #666 !important;
+      padding: 5px 4px !important;
+    }
+    #tour-skip:hover { color: #aaa !important; }
+
+    @media (max-width: 600px) {
+      #tour-card { width: calc(100vw - 24px); padding: 12px 14px 10px; }
+      #tour-card p { font-size: 12px; }
+    }
   </style>
 
   <script src="//unpkg.com/three@0.136.0/build/three.min.js"></script>
@@ -198,6 +324,7 @@
       <span class="meta-pill" id="meta-type">—</span>
       <span class="meta-pill" id="meta-status">—</span>
     </div>
+    <button id="help-btn" title="How to use this visualization">?</button>
   </nav>
   <div id="3d-graph"></div>
 
@@ -213,12 +340,35 @@
     <div class="legend-item"><span class="legend-dot" style="background:#6A0DAD"></span> Client / Household</div>
   </div>
 
+  <div id="tour">
+    <div id="tour-catcher"></div>
+    <div id="tour-spot"></div>
+    <div id="tour-card">
+      <h2 id="tour-title"></h2>
+      <div id="tour-body"></div>
+      <div id="tour-nav">
+        <span id="tour-step"></span>
+        <button id="tour-skip">Skip</button>
+        <button id="tour-back">Back</button>
+        <button id="tour-next" class="primary">Next</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let graphList = [];
 
     const FILTER_MAP = {
       'account': 'GSF Multi-Source Identity',
       'client':  'GSF Client Hierarchy',
+    };
+
+    // Landing view when the URL carries no explicit selection. A client
+    // hierarchy opens on the full three-tier picture — client, its accounts,
+    // and each account's source-system records — rather than an empty canvas.
+    const DEFAULT_VIEW = {
+      filter: 'GSF Client Hierarchy',
+      graphMatch: 'CLT-005',   // Alvarez Inc Holdings
     };
 
     function populateGraphSelect(typeFilter) {
@@ -271,8 +421,25 @@
         if (g) {
           document.getElementById('graph-select').value = g.id;
           selectGraph(g);
+          return;
         }
       }
+
+      // No graph named in the URL (or the name no longer resolves) — open the
+      // curated default so the app never lands on a blank canvas.
+      if (!filterParam) applyDefaultView();
+    }
+
+    function applyDefaultView() {
+      document.getElementById('type-filter').value = DEFAULT_VIEW.filter;
+      populateGraphSelect(DEFAULT_VIEW.filter);
+
+      const g = graphList.find(x => x.name.includes(DEFAULT_VIEW.graphMatch))
+             ?? graphList.find(x => x.graph_type === DEFAULT_VIEW.filter);
+      if (!g) return;
+
+      document.getElementById('graph-select').value = g.id;
+      selectGraph(g);
     }
 
     function updateUrl() {
@@ -381,6 +548,87 @@
       updateUrl();
     });
 
+    // ── Reconciliation reporting ────────────────────────────────────────
+    // IBOR tolerances are absolute, not proportional: a $50 break is material,
+    // $5 is small, and a penny is expected. A $41k break on an $80M account is
+    // 0.05% — statistically invisible, operationally a failed reconciliation.
+    // Values are therefore shown to the cent; rounding to millions hides
+    // exactly the discrepancy this visualization exists to expose.
+    const TOLERANCE = [
+      { over: 50,   color: '#ff4444', note: 'material break' },
+      { over: 5,    color: '#ff9900', note: 'small break' },
+      { over: 0.01, color: '#e0c341', note: 'sub-dollar variance' },
+      { over: -1,   color: '#4caf50', note: 'reconciled to the penny' },
+    ];
+
+    const tolerance = delta => TOLERANCE.find(t => Math.abs(delta) > t.over);
+
+    const usd = v => (v === null || v === undefined)
+      ? '—'
+      : v.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+
+    function mvRow(label, value) {
+      return `<div class="panel-row"><span class="label">${label}</span><span class="mv">${usd(value)}</span></div>`;
+    }
+
+    function deltaRows(delta) {
+      const t = tolerance(delta);
+      const sign = delta >= 0 ? '+' : '−';
+      return `<div class="panel-delta panel-row">
+                <span class="label">Δ Emerald – Topaz</span>
+                <span class="mv" style="color:${t.color}">${sign}${usd(Math.abs(delta))}</span>
+              </div>
+              <div class="break-note" style="color:${t.color}">${t.note}</div>`;
+    }
+
+    const recordCounts = (tc, ec, rc) =>
+      `<div class="panel-row"><span class="label">Records</span><span>T:${tc} pos · E:${ec} lots · R:${rc} pos</span></div>`;
+
+    function renderNodePanel(node) {
+      const panel = document.getElementById('info-panel');
+      const m = node.metadata;
+
+      if (m && m.total_topaz_mv !== undefined) {
+        // Client/Household hub — rolled-up MVs across all accounts
+        panel.innerHTML = `
+          <div class="panel-title">${node.id}</div>
+          <div class="panel-row"><span class="label">Accounts</span><span>${m.account_count}</span></div>
+          ${mvRow('Topaz Total', m.total_topaz_mv)}
+          ${mvRow('Emerald Total', m.total_emerald_mv)}
+          ${mvRow('Ruby Total', m.total_ruby_mv)}
+          ${deltaRows(m.mv_delta)}
+          ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
+      } else if (m && m.topaz_mv !== undefined && m.emerald_mv !== undefined) {
+        // Canonical account hub — all three MVs, delta, strategy, record counts
+        const strategyRow = m.strategy_type
+          ? `<div class="panel-row"><span class="label">Strategy</span><span>${m.strategy_type}</span></div>`
+          : '';
+        panel.innerHTML = `
+          <div class="panel-title">${node.id}</div>
+          ${strategyRow}
+          ${mvRow('Topaz MV', m.topaz_mv)}
+          ${mvRow('Emerald MV', m.emerald_mv)}
+          ${mvRow('Ruby MV', m.ruby_mv)}
+          ${deltaRows(m.mv_delta)}
+          ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
+      } else if (m && m.mv !== undefined) {
+        // Source spoke — system, MV, and record count with grain label
+        const grain = m.system === 'Emerald' ? 'lots' : 'positions';
+        const glRow = m.unrealized_gl !== null && m.unrealized_gl !== undefined
+          ? mvRow('Unrealized G/L', m.unrealized_gl)
+          : `<div class="panel-row"><span class="label">Unrealized G/L</span><span style="color:#666">not reported</span></div>`;
+        panel.innerHTML = `
+          <div class="panel-title">${node.id}</div>
+          <div class="panel-row"><span class="label">System</span><span>${m.system}</span></div>
+          ${mvRow('Market Value', m.mv)}
+          ${mvRow('Cost Basis', m.cost_basis)}
+          ${glRow}
+          <div class="panel-row"><span class="label">Records</span><span>${m.record_count} ${grain}</span></div>`;
+      } else {
+        panel.innerHTML = `<div class="panel-title">${node.id}</div>`;
+      }
+    }
+
     const elem = document.getElementById('3d-graph');
 
     // Keep the canvas sized to the space below the top bar.
@@ -420,62 +668,7 @@
       .nodeColor(node => NODE_COLORS[node.group] ?? '#fff')
       .onNodeHover(node => {
         elem.style.cursor = node ? 'pointer' : null;
-        if (!node) return;
-        const panel = document.getElementById('info-panel');
-        const m = node.metadata;
-        const fmt = v => '$' + (v / 1e6).toFixed(2) + 'M';
-
-        const recordCounts = (tc, ec, rc) =>
-          `<div class="panel-row"><span class="label">Records</span><span>T:${tc} pos · E:${ec} lots · R:${rc} pos</span></div>`;
-
-        const deltaSpan = (delta) => {
-          const abs = Math.abs(delta);
-          const color = abs > 1e6 ? '#ff4444' : abs > 1e5 ? '#ff9900' : null;
-          const sign = delta >= 0 ? '+' : '';
-          return color
-            ? `<span style="color:${color}">${sign}${fmt(delta)}</span>`
-            : `<span>${sign}${fmt(delta)}</span>`;
-        };
-
-        if (m && m.total_topaz_mv !== undefined) {
-          // Client/Household hub — rolled-up MVs across all accounts
-          panel.innerHTML = `
-            <div class="panel-title">${node.id}</div>
-            <div class="panel-row"><span class="label">Accounts</span><span>${m.account_count}</span></div>
-            <div class="panel-row"><span class="label">Topaz Total</span><span>${fmt(m.total_topaz_mv)}</span></div>
-            <div class="panel-row"><span class="label">Emerald Total</span><span>${fmt(m.total_emerald_mv)}</span></div>
-            <div class="panel-row"><span class="label">Ruby Total</span><span>${fmt(m.total_ruby_mv)}</span></div>
-            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span>${deltaSpan(m.mv_delta)}</div>
-            ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
-        } else if (m && m.topaz_mv !== undefined && m.emerald_mv !== undefined) {
-          // Canonical account hub — all three MVs, delta, strategy, record counts
-          const strategyRow = m.strategy_type
-            ? `<div class="panel-row"><span class="label">Strategy</span><span>${m.strategy_type}</span></div>`
-            : '';
-          panel.innerHTML = `
-            <div class="panel-title">${node.id}</div>
-            ${strategyRow}
-            <div class="panel-row"><span class="label">Topaz MV</span><span>${fmt(m.topaz_mv)}</span></div>
-            <div class="panel-row"><span class="label">Emerald MV</span><span>${fmt(m.emerald_mv)}</span></div>
-            <div class="panel-row"><span class="label">Ruby MV</span><span>${fmt(m.ruby_mv)}</span></div>
-            <div class="panel-delta panel-row"><span class="label">Δ Emerald – Topaz</span>${deltaSpan(m.mv_delta)}</div>
-            ${recordCounts(m.topaz_record_count, m.emerald_record_count, m.ruby_record_count)}`;
-        } else if (m && m.mv !== undefined) {
-          // Source spoke — system, MV, and record count with grain label
-          const grain = m.system === 'Emerald' ? 'lots' : 'positions';
-          const glRow = m.unrealized_gl !== null && m.unrealized_gl !== undefined
-            ? `<div class="panel-row"><span class="label">Unrealized G/L</span><span>${fmt(m.unrealized_gl)}</span></div>`
-            : `<div class="panel-row"><span class="label">Unrealized G/L</span><span style="color:#666">not reported</span></div>`;
-          panel.innerHTML = `
-            <div class="panel-title">${node.id}</div>
-            <div class="panel-row"><span class="label">System</span><span>${m.system}</span></div>
-            <div class="panel-row"><span class="label">Market Value</span><span>${fmt(m.mv)}</span></div>
-            <div class="panel-row"><span class="label">Cost Basis</span><span>${fmt(m.cost_basis)}</span></div>
-            ${glRow}
-            <div class="panel-row"><span class="label">Records</span><span>${m.record_count} ${grain}</span></div>`;
-        } else {
-          panel.innerHTML = `<div class="panel-title">${node.id}</div>`;
-        }
+        if (node) renderNodePanel(node);
       })
       .onNodeDragEnd(node => {
         node.fx = node.x;
@@ -493,7 +686,235 @@
         );
       });
 
-    loadGraphList();
+    // ── Guided tour ─────────────────────────────────────────────────────
+    const TOUR_KEY = 'gsf.tourSeen';
+    const PANEL_HINT = '<div class="hint">Hover a node to explore</div>';
+
+    // target: element *id* to spotlight (null = centred card over a dimmed
+    //   screen). Ids, not CSS selectors — "3d-graph" starts with a digit and
+    //   is not a valid selector, so querySelector('#3d-graph') throws.
+    // dim:false = leave the scene visible and park the card at the bottom
+    const TOUR_STEPS = [
+      {
+        title: 'One account. Three systems. Three different numbers.',
+        body: `<p>Every investment account at GSF is recorded in three places:
+               <b>Topaz</b> (custodian), <b>Emerald</b> (front office) and
+               <b>Ruby</b> (fund accounting).</p>
+               <p>This visualization shows those relationships — and what happens
+               to the numbers when you line them up side by side.</p>`,
+      },
+      {
+        title: 'Two ways in',
+        target: 'type-filter',
+        body: `<p><b>Client Hierarchy</b> starts at a household and fans out
+               through its accounts, then to each account's source records.</p>
+               <p><b>Account Graphs</b> isolate a single account and its three
+               source records — the same picture, one level down.</p>`,
+      },
+      {
+        title: 'Pick a subject',
+        target: 'graph-select',
+        body: `<p>25 client hierarchies and 100 individual accounts, all
+               synthetic. You're currently on a client hierarchy.</p>
+               <p>Your selection lives in the URL, so any view you land on can
+               be shared as a link.</p>`,
+      },
+      {
+        title: 'Read the shape',
+        target: '3d-graph',
+        dim: false,
+        body: `<p>The <b style="color:#9d5ae8">purple</b> hub is the client.
+               Each <b style="color:#e0a020">gold</b> node is one real account.</p>
+               <p>The three coloured spokes off every account —
+               <b style="color:#4a90d9">Topaz</b>,
+               <b style="color:#4caf50">Emerald</b>,
+               <b style="color:#e05555">Ruby</b> — are that <i>same</i> account
+               as each system knows it, under three different identifiers.
+               Nothing in the source data says they're the same thing.</p>`,
+      },
+      {
+        title: 'Node values',
+        target: 'label-select',
+        body: `<p>The floating labels carry a metric for each source record:
+               market value, cost basis, or unrealized G/L.</p>
+               <p>Switch to <b>Unrealized G/L</b> and watch Ruby — fund
+               accounting doesn't report one at all. That gap is a governance
+               problem before it's ever a reporting problem.</p>`,
+      },
+      {
+        title: 'Where it breaks',
+        target: 'info-panel',
+        body: `<p>Hover any node for detail. Values are shown to the cent
+               deliberately: on an IBOR, tolerances are absolute. A <b>$50</b>
+               difference is material, <b>$5</b> is small, and a penny is
+               what you expect.</p>
+               <p>Rounded to millions these three systems look identical.
+               To the cent, <b>not one of the 100 accounts here reconciles</b>
+               — the worst breaks by over $41,000.</p>
+               <p>The record counts explain part of it: Topaz keeps
+               <b>positions</b>, Emerald keeps <b>tax lots</b>. Same account,
+               different grain.</p>`,
+        onEnter() {
+          const nodes = Graph.graphData().nodes || [];
+          const worst = nodes
+            .filter(n => n.metadata && n.metadata.mv_delta !== undefined && n.metadata.topaz_mv !== undefined)
+            .sort((a, b) => Math.abs(b.metadata.mv_delta) - Math.abs(a.metadata.mv_delta))[0];
+          if (worst) renderNodePanel(worst);
+        },
+      },
+      {
+        title: 'Colour key',
+        target: 'legend',
+        body: `<p>Node colours map to the system of record. Keep it in view
+               while you explore — on a client hierarchy the same three colours
+               repeat under every account.</p>`,
+      },
+      {
+        title: 'Now explore',
+        dim: false,
+        body: `<p><b>Drag</b> to rotate · <b>scroll</b> to zoom ·
+               <b>click</b> a node to fly to it · <b>drag a node</b> to pin it
+               in place.</p>
+               <p>Reopen this walkthrough any time with the <b>?</b> button in
+               the top bar.</p>`,
+      },
+    ];
+
+    let tourIndex = 0;
+    let tourDir = 1;
+
+    const tourEl = () => document.getElementById('tour');
+
+    const stepTarget = step => step.target ? document.getElementById(step.target) : null;
+
+    function targetVisible(step) {
+      if (!step.target) return true;
+      const el = document.getElementById(step.target);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }
+
+    function layoutTour(step) {
+      const spot = document.getElementById('tour-spot');
+      const card = document.getElementById('tour-card');
+      const el   = stepTarget(step);
+      const pad = 6, gap = 14;
+
+      let rect = null;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        rect = { top: r.top - pad, left: r.left - pad,
+                 width: r.width + pad * 2, height: r.height + pad * 2 };
+      }
+
+      if (step.dim === false) {
+        spot.style.display = 'none';
+      } else if (rect) {
+        spot.style.display = 'block';
+        spot.classList.remove('no-target');
+        spot.style.top    = rect.top + 'px';
+        spot.style.left   = rect.left + 'px';
+        spot.style.width  = rect.width + 'px';
+        spot.style.height = rect.height + 'px';
+      } else {
+        // Zero-size spot: the 9999px outer shadow becomes a full-screen dim
+        spot.style.display = 'block';
+        spot.classList.add('no-target');
+        spot.style.top    = (window.innerHeight / 2) + 'px';
+        spot.style.left   = (window.innerWidth / 2) + 'px';
+        spot.style.width  = '0px';
+        spot.style.height = '0px';
+      }
+
+      // Measure only after the step's content is in the DOM
+      card.style.visibility = 'hidden';
+      card.style.left = '0px';
+      card.style.top  = '0px';
+      const cw = card.offsetWidth, ch = card.offsetHeight;
+
+      let top, left;
+      if (step.dim === false) {
+        top  = window.innerHeight - ch - 28;
+        left = window.innerWidth / 2 - cw / 2;
+      } else if (rect) {
+        const below = rect.top + rect.height + gap;
+        top  = (below + ch <= window.innerHeight - gap) ? below : rect.top - ch - gap;
+        left = rect.left + rect.width / 2 - cw / 2;
+      } else {
+        top  = window.innerHeight / 2 - ch / 2;
+        left = window.innerWidth / 2 - cw / 2;
+      }
+
+      card.style.left = Math.min(Math.max(gap, left), window.innerWidth - cw - gap) + 'px';
+      card.style.top  = Math.min(Math.max(gap, top), window.innerHeight - ch - gap) + 'px';
+      card.style.visibility = 'visible';
+    }
+
+    function showStep(i) {
+      const step = TOUR_STEPS[i];
+      document.getElementById('tour-title').textContent = step.title;
+      document.getElementById('tour-body').innerHTML = step.body;
+      document.getElementById('tour-step').textContent = `${i + 1} / ${TOUR_STEPS.length}`;
+      document.getElementById('tour-back').style.display = i === 0 ? 'none' : '';
+      document.getElementById('tour-next').textContent =
+        i === TOUR_STEPS.length - 1 ? 'Done' : 'Next';
+      // A throwing onEnter must not wedge navigation — the tour has to stay
+      // escapable even if the graph data isn't in the shape a step expects.
+      if (step.onEnter) {
+        try { step.onEnter(); } catch (e) { console.warn('tour step onEnter failed', e); }
+      }
+      layoutTour(step);
+    }
+
+    function goToStep(i) {
+      // Step over anything not currently on screen — the legend is hidden on mobile
+      while (i >= 0 && i < TOUR_STEPS.length && !targetVisible(TOUR_STEPS[i])) i += tourDir;
+      if (i < 0 || i >= TOUR_STEPS.length) return endTour();
+      tourIndex = i;
+      showStep(i);
+    }
+
+    function startTour() {
+      tourDir = 1;
+      tourEl().classList.add('active');
+      goToStep(0);
+    }
+
+    function endTour() {
+      tourEl().classList.remove('active');
+      document.getElementById('info-panel').innerHTML = PANEL_HINT;
+      try { localStorage.setItem(TOUR_KEY, '1'); } catch (e) { /* private mode */ }
+    }
+
+    function nextStep() { tourDir =  1; goToStep(tourIndex + 1); }
+    function prevStep() { tourDir = -1; goToStep(tourIndex - 1); }
+
+    document.getElementById('tour-next').addEventListener('click', nextStep);
+    document.getElementById('tour-back').addEventListener('click', prevStep);
+    document.getElementById('tour-skip').addEventListener('click', endTour);
+    document.getElementById('tour-catcher').addEventListener('click', nextStep);
+    document.getElementById('help-btn').addEventListener('click', startTour);
+
+    document.addEventListener('keydown', e => {
+      if (!tourEl().classList.contains('active')) return;
+      if (e.key === 'Escape')     endTour();
+      if (e.key === 'ArrowRight') nextStep();
+      if (e.key === 'ArrowLeft')  prevStep();
+    });
+
+    window.addEventListener('resize', () => {
+      if (tourEl().classList.contains('active')) layoutTour(TOUR_STEPS[tourIndex]);
+    });
+
+    function maybeStartTour() {
+      if (new URLSearchParams(location.search).get('tour') === '1') return startTour();
+      let seen = false;
+      try { seen = localStorage.getItem(TOUR_KEY) === '1'; } catch (e) { /* private mode */ }
+      if (!seen) startTour();
+    }
+
+    loadGraphList().then(maybeStartTour);
   </script>
 </body>
 </html>
