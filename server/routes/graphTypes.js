@@ -33,38 +33,6 @@ router.get('/:id', (req, res) => {
   res.json(graphType);
 });
 
-// Create a new graph type (with optional node types and link types)
-router.post('/', (req, res) => {
-  const { name, description, node_types = [], link_types = [] } = req.body;
-  if (!name) return res.status(400).json({ error: 'name is required' });
-
-  const insertGraphType = db.prepare('INSERT INTO GraphType (name, description) VALUES (?, ?)');
-  const insertNodeType = db.prepare(
-    'INSERT INTO NodeType (graph_type_id, name, display_group, color) VALUES (?, ?, ?, ?)'
-  );
-  const insertLinkType = db.prepare(
-    'INSERT INTO LinkType (graph_type_id, name, color) VALUES (?, ?, ?)'
-  );
-
-  const result = db.transaction(() => {
-    const { lastInsertRowid: gtId } = insertGraphType.run(name, description ?? null);
-    for (const nt of node_types) {
-      insertNodeType.run(gtId, nt.name, nt.display_group, nt.color ?? null);
-    }
-    for (const lt of link_types) {
-      insertLinkType.run(gtId, lt.name, lt.color ?? null);
-    }
-    return gtId;
-  })();
-
-  res.status(201).json({ id: result });
-});
-
-// Delete a graph type
-router.delete('/:id', (req, res) => {
-  const info = db.prepare('DELETE FROM GraphType WHERE id = ?').run(req.params.id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Graph type not found' });
-  res.status(204).send();
-});
+// Read-only API by design — see the note in routes/graphs.js.
 
 module.exports = router;

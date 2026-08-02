@@ -5,7 +5,7 @@
 
 const fs   = require('fs');
 const path = require('path');
-const db   = require('../server/db');
+const db   = require('./db');
 
 function initSchema() {
   const tableExists = db.prepare(

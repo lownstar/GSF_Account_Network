@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const db = require('../server/db');
+const db = require('./db');
 
 const SIBLING_SEED = path.resolve(__dirname, '../../GSF_Semantic_Pipeline/data/seed_v2');
 const SEED_DIR = process.env.SEED_DIR

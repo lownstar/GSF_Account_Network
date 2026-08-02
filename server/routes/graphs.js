@@ -67,55 +67,8 @@ router.get('/:id', (req, res) => {
   res.json({ nodes, links });
 });
 
-// Create a new graph
-router.post('/', (req, res) => {
-  const { name, graph_type_id, status = 'Active' } = req.body;
-  if (!name || !graph_type_id) return res.status(400).json({ error: 'name and graph_type_id are required' });
-
-  const { lastInsertRowid } = db.prepare(
-    'INSERT INTO Graph (name, graph_type_id, status) VALUES (?, ?, ?)'
-  ).run(name, graph_type_id, status);
-
-  res.status(201).json({ id: lastInsertRowid });
-});
-
-// Add a node to a graph
-router.post('/:id/nodes', (req, res) => {
-  const { label, node_type_id, status = 'Active', metadata } = req.body;
-  if (!label || !node_type_id) return res.status(400).json({ error: 'label and node_type_id are required' });
-
-  const graph = db.prepare('SELECT id FROM Graph WHERE id = ?').get(req.params.id);
-  if (!graph) return res.status(404).json({ error: 'Graph not found' });
-
-  const { lastInsertRowid } = db.prepare(
-    'INSERT INTO Node (graph_id, node_type_id, label, status, metadata) VALUES (?, ?, ?, ?, ?)'
-  ).run(req.params.id, node_type_id, label, status, metadata ? JSON.stringify(metadata) : null);
-
-  res.status(201).json({ id: lastInsertRowid });
-});
-
-// Add a link between nodes in a graph
-router.post('/:id/links', (req, res) => {
-  const { source_node_id, target_node_id, link_type_id, status = 'Active' } = req.body;
-  if (!source_node_id || !target_node_id || !link_type_id) {
-    return res.status(400).json({ error: 'source_node_id, target_node_id, and link_type_id are required' });
-  }
-
-  const graph = db.prepare('SELECT id FROM Graph WHERE id = ?').get(req.params.id);
-  if (!graph) return res.status(404).json({ error: 'Graph not found' });
-
-  const { lastInsertRowid } = db.prepare(
-    'INSERT INTO Link (graph_id, source_node_id, target_node_id, link_type_id, status) VALUES (?, ?, ?, ?, ?)'
-  ).run(req.params.id, source_node_id, target_node_id, link_type_id, status);
-
-  res.status(201).json({ id: lastInsertRowid });
-});
-
-// Delete a graph (cascades to nodes and links)
-router.delete('/:id', (req, res) => {
-  const info = db.prepare('DELETE FROM Graph WHERE id = ?').run(req.params.id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Graph not found' });
-  res.status(204).send();
-});
+// Read-only API by design. Graph, node, and link creation/deletion happen only
+// in the seed scripts (scripts/), which run out-of-process against a writable
+// connection. The deployed server has no route that can modify the database.
 
 module.exports = router;

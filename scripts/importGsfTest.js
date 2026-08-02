@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const db = require('../server/db');
+const db = require('./db');
 
 const GRAPH_TYPE_NAME = 'GSF Multi-Source Identity';
 const GRAPH_NAME = 'GSF Test — 5 Accounts';

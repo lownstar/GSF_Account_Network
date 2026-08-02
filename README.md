@@ -89,17 +89,19 @@ railway.json            # Railway deployment config
 
 ## API
 
+The API is **read-only**. The server opens SQLite in readonly mode and exposes
+no route that can modify data; all writes happen in the seed scripts, which run
+as a separate process before the server starts.
+
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/graphs` | List all graphs |
 | GET | `/api/graphs/:id` | Full `{nodes, links}` JSON |
-| POST | `/api/graphs` | Create graph |
-| POST | `/api/graphs/:id/nodes` | Add node |
-| POST | `/api/graphs/:id/links` | Add link |
-| DELETE | `/api/graphs/:id` | Delete graph + cascade |
 | GET | `/api/graph-types` | List graph types |
 | GET | `/api/graph-types/:id` | Graph type with node/link types |
-| POST | `/api/graph-types` | Create graph type |
+
+Only `index.html` is served statically — the project root (database, seed CSVs,
+server source) is deliberately not exposed.
 
 ---
 
