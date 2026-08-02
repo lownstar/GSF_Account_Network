@@ -3,6 +3,10 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Don't advertise the stack on every response. Fingerprinting only — no access
+// is granted either way — but there's no reason to hand it over.
+app.disable('x-powered-by');
 const ROOT = path.join(__dirname, '..');
 
 // The project root is deliberately NOT served statically — it contains the
